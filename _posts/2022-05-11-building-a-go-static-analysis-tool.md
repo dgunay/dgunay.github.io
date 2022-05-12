@@ -198,6 +198,99 @@ In the case of something like `mypkg.MyInterface`, the AST looks like:
 ![](/assets/SelectorExpr-example.svg)
 
 Simple enough, but the wrinkly part comes from the right leaf of that tree
-potentially being another `SelectorExpr`. The `ProcessTypeChain` bit recursively
+potentially being a chain of `SelectorExpr`s. The `ProcessTypeChain` bit recursively
 traverses the AST until it runs into a terminating `Ident`. We store the Ident
 of the interface and other relevant information for later.
+
+### Finding captured variables we care about
+
+We then need to find all places where a function is called with some receiver.
+This is harder and I ended up cutting some corners. The code:
+
+{% raw %}
+
+```go
+// Step 5: gather all captured variables in the body
+// Get all CallExprs with receivers
+capturedCalls := []CallViaReceiver{}
+ast.Inspect(callback.Body, func(node ast.Node) bool {
+  switch node.(type) {
+  case *ast.CallExpr:
+    capturedCall := NewCallViaReceiver(pass.TypesInfo)
+
+    expr := node.(*ast.CallExpr).Fun
+    if selExpr, ok := expr.(*ast.SelectorExpr); ok {
+      err := capturedCall.ProcessSelExpr(selExpr)
+      if err == nil {
+        capturedCalls = append(capturedCalls, capturedCall)
+      } else {
+        logger.Error(err)
+      }
+    }
+  }
+  return true
+})
+```
+
+{% endraw %}
+
+The `SelectorExpr` traversal is encapsulated in my `CallViaReceiver` struct.
+It can handle the simple case `a.b.c.Foo()`, but as you may have surmised from
+the test code from earlier, it doesn't handle receivers in arrays and
+receivers from the return value of other functions. Finding the type of the
+receiver was not hard, but I currently don't know of a convenient way of
+tracing the receiver's owner and where they are scoped. Maybe this is easy and I
+just don't know how to do it yet - that turned out to be the case for the next
+problem.
+
+### Figure out if the captured receivers implement any of our interface types
+
+This part took me a while. At first I tried to access the type information
+through the AST, since some of the structs have pointers to `ast.Object`, which
+has type information in the same package. However, some objects pointed to
+things in other packages, and in that case the type information would usually
+be `nil` - super unhelpful.
+
+I eventually reached out on the Gophers Slack in the #tools channel and someone
+coaxed me into finding out that the `*analysis.Pass` that our run function
+receives already has the type information for all of the code. Since we
+have access to the type info and gathered it in the last two steps, all we
+end up having to do (after removing the looping and configuration boilerplate):
+
+{% raw %}
+
+```go
+// Don't check if the receiver is one of the function params
+// (code that skips receivers that are function params)
+
+ifaceType := paramType.InterfaceType
+logger.Debugf("Checking if %s implements %s", capturedType, paramType.InterfaceIdent.Name)
+if types.Implements(capturedType, ifaceType) {
+  Report(pass, &capturedCall, paramType)
+} else if types.Implements(types.NewPointer(capturedType), ifaceType) {
+  // FIXME: it is unclear to me why sometimes it is necessary
+  // to convert the type to a pointer before checking if it
+  // implements the interface. Haven't yet reproduced the bug.
+  Report(pass, &capturedCall, paramType)
+}
+```
+
+{% endraw %}
+
+## Testing
+
+I wrote a variety of tests using example code, and then used the [`analysistest`][analysistest]
+package to run `ifacecapture` and check that the `// want` directives happened
+(and that no false positives happened).
+
+[analysistest]: https://pkg.go.dev/golang.org/x/tools/go/analysis/analysistest
+
+## Remarks
+
+Overall I found the process surprisingly accessible. Go's obnoxious simplicity
+works to its advantage here greatly. It took me a weekend to get this working
+in an okay-ish state; I'd highly recommend that if you maintain a large Go
+codebase, you take some time to learn about the `ast` package and writing
+analyzers. You could write bespoke tooling to enforce your organization's
+code patterns and catch usage mistakes that are very specific to your
+application's design.
