@@ -4,15 +4,14 @@ title: About
 permalink: /about/
 ---
 
-This is the base Jekyll theme. You can find out more info about customizing your Jekyll theme, as well as basic Jekyll usage documentation at [jekyllrb.com](https://jekyllrb.com/)
+Devin Gunay is a software engineer. He's worked at:
 
-You can find the source code for Minima at GitHub:
-[jekyll][jekyll-organization] /
-[minima](https://github.com/jekyll/minima)
-
-You can find the source code for Jekyll at GitHub:
-[jekyll][jekyll-organization] /
-[jekyll](https://github.com/jekyll/jekyll)
-
-
-[jekyll-organization]: https://github.com/jekyll
+* [Feedonomics](https://feedonomics.com/), on data scraping, data pipelines, 
+   and [FeedTelligence](https://feedonomics.com/feedtelligence/). Mostly PHP.
+* [The Aerospace Corporation](https://aerospace.org/), on software assurance
+  of various Space Force codebases. Investigative static code analysis and
+  tooling development using [Understand's Perl API](https://www.scitools.com/).
+* [Maestro Interactive](https://maestro.io), on video compositor prototypes and
+  Maestro Studio, a browser-based WebRTC conferencing and live streaming platform.
+  C++, React, Node.js, and Go.
+* [Yendo](https://yendo.com), on backend web development in Go.
